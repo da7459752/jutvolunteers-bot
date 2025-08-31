@@ -1,6 +1,6 @@
-import os
 import asyncio
 import logging
+import os
 import asyncpg
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -12,9 +12,10 @@ from aiogram.fsm.state import State, StatesGroup
 # --- Логирование ---
 logging.basicConfig(level=logging.INFO)
 
+# --- Переменные окружения ---
+TOKEN = os.getenv("TOKEN")
+DB_DSN = os.getenv("DATABASE_URL")
 
-TOKEN = os.getenv("BOT_TOKEN")
-DB_DSN = os.getenv("DB_DSN")
 
 bot = Bot(token=TOKEN)
 storage = MemoryStorage()
