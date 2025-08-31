@@ -27,6 +27,31 @@ db_pool = None  # глобальная переменная для подклю�
 async def create_db_pool():
     return await asyncpg.create_pool(dsn=DB_DSN)
 
+# --- Создание таблиц ---
+async def init_db():
+    async with db_pool.acquire() as conn:
+        # volunteers
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS volunteers (
+            id SERIAL PRIMARY KEY,
+            full_name TEXT NOT NULL,
+            contacts TEXT NOT NULL,
+            status TEXT DEFAULT 'Active',
+            lateness_count INT DEFAULT 0,
+            warnings_count INT DEFAULT 0
+        );
+        """)
+        # blacklist
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS blacklist (
+            id SERIAL PRIMARY KEY,
+            full_name TEXT NOT NULL,
+            reason TEXT,
+            added TIMESTAMP DEFAULT NOW(),
+            UNIQUE(full_name)
+        );
+        """)
+
 # --- FSM ---
 class LatenessStates(StatesGroup):
     waiting_for_id = State()
@@ -405,6 +430,11 @@ async def main():
     global db_pool
     db_pool = await create_db_pool()
     logging.info("DB connected")
+
+    # создаём таблицы
+    await init_db()
+    logging.info("Tables checked/created")
+
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
