@@ -8,6 +8,8 @@ from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiohttp import web
+
 
 # --- Логирование ---
 logging.basicConfig(level=logging.INFO)
@@ -436,6 +438,30 @@ async def main():
     logging.info("Tables checked/created")
 
     await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
+async def handle(request):
+    return web.Response(text="Bot is running")
+
+async def start_webserver():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    port = int(os.getenv("PORT", 10000))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+# запускаем и бота, и сервер
+async def main():
+    # 🚀 стартуем веб-сервер
+    asyncio.create_task(start_webserver())
+
+    # 🚀 запускаем бота
+    from bot import start_bot  # импортируй свою функцию запуска polling
+    await start_bot()
 
 if __name__ == "__main__":
     asyncio.run(main())
