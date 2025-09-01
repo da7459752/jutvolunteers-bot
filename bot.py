@@ -18,7 +18,6 @@ logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("TOKEN")
 DB_DSN = os.getenv("DATABASE_URL")
 
-
 bot = Bot(token=TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
@@ -427,6 +426,12 @@ async def handle_messages(message: types.Message, state: FSMContext):
         except ValueError:
             await message.answer("⚠ Введите число (ID).")
 
+# --- Обработчик вебхуков ---
+async def handle_webhook(request):
+    data = await request.json()
+    await dp.feed_webhook_update(bot, data)
+    return web.Response()
+
 # --- Запуск ---
 async def main():
     global db_pool
@@ -437,23 +442,29 @@ async def main():
     await init_db()
     logging.info("Tables checked/created")
 
-async def handle(request):
-    data = await request.json()
-    await dp.feed_webhook_update(bot, data)
-    return web.Response()
-
-async def main():
-    global db_pool
-    db_pool = await create_db_pool()
-    await init_db()
-
-    app = web.Application()
-    app.router.add_post(f"/webhook/{TOKEN}", handle)
-
     # Устанавливаем webhook
-    await bot.set_webhook(f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook/{TOKEN}")
+    webhook_url = f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook/{TOKEN}"
+    await bot.set_webhook(webhook_url)
+    logging.info(f"Webhook set to {webhook_url}")
+
+    # Настройка aiohttp приложения
+    app = web.Application()
+    app.router.add_post(f"/webhook/{TOKEN}", handle_webhook)
 
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", 8080)
     await site.start()
+    logging.info("Server started on port 8080")
+
+    # Запуск бесконечного цикла
+    try:
+        await asyncio.Future()  # Запуск бесконечного цикла
+    except KeyboardInterrupt:
+        pass
+    finally:
+        await runner.cleanup()
+        await bot.session.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
