@@ -437,31 +437,23 @@ async def main():
     await init_db()
     logging.info("Tables checked/created")
 
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
 async def handle(request):
-    return web.Response(text="Bot is running")
+    data = await request.json()
+    await dp.feed_webhook_update(bot, data)
+    return web.Response()
 
-async def start_webserver():
+async def main():
+    global db_pool
+    db_pool = await create_db_pool()
+    await init_db()
+
     app = web.Application()
-    app.router.add_get("/", handle)
-    port = int(os.getenv("PORT", 10000))
+    app.router.add_post(f"/webhook/{TOKEN}", handle)
+
+    # Устанавливаем webhook
+    await bot.set_webhook(f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook/{TOKEN}")
+
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
+    site = web.TCPSite(runner, "0.0.0.0", 8080)
     await site.start()
-
-# запускаем и бота, и сервер
-async def main():
-    # 🚀 стартуем веб-сервер
-    asyncio.create_task(start_webserver())
-
-    # 🚀 запускаем бота
-    from bot import start_bot  # импортируй свою функцию запуска polling
-    await start_bot()
-
-if __name__ == "__main__":
-    asyncio.run(main())
