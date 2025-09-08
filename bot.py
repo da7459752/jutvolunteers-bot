@@ -122,47 +122,6 @@ def manage_menu():
     )
     return kb
 
-
-
-# --- Пагинация списка волонтёров ---
-async def get_volunteers_page(page: int = 0, per_page: int = 20):
-    rows = await get_volunteers()
-    total = len(rows)
-    start = page * per_page
-    end = start + per_page
-    page_rows = rows[start:end]
-
-    text = f"📋 Список волонтёров (стр. {page+1}):\n"
-    if not page_rows:
-        text += "❌ Нет данных."
-    else:
-        for r in page_rows:
-            text += (
-                f"{r['id']}. {r['full_name']} | {r['status']} | "
-                f"{r['contacts']} | Опозданий: {r['lateness_count']} | Замечаний: {r['warnings_count']}\n"
-            )
-
-    # Кнопки пагинации
-    buttons = []
-    if page > 0:
-        buttons.append(InlineKeyboardButton("⬅ Назад", callback_data=f"page_volunteers_{page-1}"))
-    if end < total:
-        buttons.append(InlineKeyboardButton("Вперёд ➡", callback_data=f"page_volunteers_{page+1}"))
-
-    # Главное меню снизу
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            buttons,
-            [InlineKeyboardButton("🏠 Главное меню", callback_data="menu_back")]
-        ]
-    )
-
-    return text, kb
-
-
-
-
-
 # --- Получение списка ---
 async def get_volunteers():
     async with db_pool.acquire() as conn:
@@ -254,18 +213,50 @@ async def add_direct_blacklist(volunteer_id: int, reason: str, message: types.Me
 async def start(message: types.Message):
     await message.answer("📌 Главное меню:", reply_markup=main_menu())
 
+
+PAGE_SIZE = 5  # сколько записей показываем на странице
+
+# Функция для создания кнопок пагинации
+def pagination_markup(page: int, total_pages: int, prefix: str):
+    buttons = []
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("⬅️ Назад", callback_data=f"{prefix}_page_{page-1}"))
+    if page < total_pages - 1:
+        nav_buttons.append(InlineKeyboardButton("➡️ Вперёд", callback_data=f"{prefix}_page_{page+1}"))
+    if nav_buttons:
+        buttons.append(nav_buttons)
+    buttons.append([InlineKeyboardButton("Главное меню", callback_data="menu_main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+# Функция показа записей с пагинацией
+async def show_records(query: types.CallbackQuery, rows, page: int = 0, prefix: str = "volunteers", title: str = "Список"):
+    if not rows:
+        await query.message.edit_text(f"{title} пуст.", reply_markup=main_menu())
+        return
+
+    total_pages = (len(rows) + PAGE_SIZE - 1) // PAGE_SIZE
+    start = page * PAGE_SIZE
+    end = start + PAGE_SIZE
+
+    text = f"{title}:\n"
+    for r in rows[start:end]:
+        # Можно менять формат под волонтёров или черный список
+        if prefix == "volunteers":
+            text += f"{r['id']}. {r['full_name']} | {r['status']} | {r['contacts']} | Опозданий: {r['lateness_count']} | Замечаний: {r['warnings_count']}\n"
+        elif prefix == "blacklist":
+            text += f"{r['id']}. {r['full_name']} | {r['reason']}\n"
+
+    await query.message.edit_text(text, reply_markup=pagination_markup(page, total_pages, prefix))
+
+
+
 # --- Колбэки ---
 @dp.callback_query()
 async def callbacks(query: types.CallbackQuery, state: FSMContext):
-if query.data == "menu_volunteers":
-    text, kb = await get_volunteers_page(0)
-    await query.message.edit_text(text, reply_markup=kb)
-
-elif query.data.startswith("page_volunteers_"):
-    page = int(query.data.split("_")[-1])
-    text, kb = await get_volunteers_page(page)
-    await query.message.edit_text(text, reply_markup=kb)
-
+    if query.data == "menu_volunteers":
+        rows = await get_volunteers()
+        await show_records(query, rows, page=0, prefix="volunteers", title="Список волонтёров")
 
     elif query.data == "menu_lateness":
         await query.message.edit_text("Введите ID волонтёра для фиксации опоздания:")
@@ -277,10 +268,7 @@ elif query.data.startswith("page_volunteers_"):
 
     elif query.data == "menu_blacklist":
         rows = await get_blacklist()
-        text = "Черный список:\n" if rows else "Черный список пуст."
-        for r in rows:
-            text += f"{r['id']}. {r['full_name']} | Причина: {r['reason']} | Добавлен: {r['added']}\n"
-        await query.message.edit_text(text, reply_markup=main_menu())
+        await show_records(query, rows, page=0, prefix="blacklist", title="Черный список")
 
     elif query.data == "menu_blacklist_direct":
         await query.message.edit_text("Введите ID волонтёра для добавления в ЧС:")
@@ -341,6 +329,22 @@ elif query.data.startswith("page_volunteers_"):
         await state.set_state(EditVolunteerStates.waiting_for_new_value)
         await query.message.answer(f"Введите новое значение для {field}:")
         await query.answer()
+
+
+# Обработка кнопок пагинации
+@dp.callback_query_handler(lambda c: c.data and ("_page_" in c.data))
+async def paginate_records(query: types.CallbackQuery):
+    parts = query.data.split("_page_")
+    prefix = parts[0]
+    page = int(parts[1])
+
+    if prefix == "volunteers":
+        rows = await get_volunteers()
+        await show_records(query, rows, page, prefix="volunteers", title="Список волонтёров")
+    elif prefix == "blacklist":
+        rows = await get_blacklist()
+        await show_records(query, rows, page, prefix="blacklist", title="Черный список")
+
 
 # --- FSM обработка ---
 @dp.message()
