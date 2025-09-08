@@ -122,6 +122,47 @@ def manage_menu():
     )
     return kb
 
+
+
+# --- Пагинация списка волонтёров ---
+async def get_volunteers_page(page: int = 0, per_page: int = 20):
+    rows = await get_volunteers()
+    total = len(rows)
+    start = page * per_page
+    end = start + per_page
+    page_rows = rows[start:end]
+
+    text = f"📋 Список волонтёров (стр. {page+1}):\n"
+    if not page_rows:
+        text += "❌ Нет данных."
+    else:
+        for r in page_rows:
+            text += (
+                f"{r['id']}. {r['full_name']} | {r['status']} | "
+                f"{r['contacts']} | Опозданий: {r['lateness_count']} | Замечаний: {r['warnings_count']}\n"
+            )
+
+    # Кнопки пагинации
+    buttons = []
+    if page > 0:
+        buttons.append(InlineKeyboardButton("⬅ Назад", callback_data=f"page_volunteers_{page-1}"))
+    if end < total:
+        buttons.append(InlineKeyboardButton("Вперёд ➡", callback_data=f"page_volunteers_{page+1}"))
+
+    # Главное меню снизу
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            buttons,
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="menu_back")]
+        ]
+    )
+
+    return text, kb
+
+
+
+
+
 # --- Получение списка ---
 async def get_volunteers():
     async with db_pool.acquire() as conn:
@@ -216,12 +257,15 @@ async def start(message: types.Message):
 # --- Колбэки ---
 @dp.callback_query()
 async def callbacks(query: types.CallbackQuery, state: FSMContext):
-    if query.data == "menu_volunteers":
-        rows = await get_volunteers()
-        text = "Список волонтёров:\n" if rows else "Список пуст."
-        for r in rows:
-            text += f"{r['id']}. {r['full_name']} | {r['status']} | {r['contacts']} | Опозданий: {r['lateness_count']} | Замечаний: {r['warnings_count']}\n"
-        await query.message.edit_text(text, reply_markup=main_menu())
+if query.data == "menu_volunteers":
+    text, kb = await get_volunteers_page(0)
+    await query.message.edit_text(text, reply_markup=kb)
+
+elif query.data.startswith("page_volunteers_"):
+    page = int(query.data.split("_")[-1])
+    text, kb = await get_volunteers_page(page)
+    await query.message.edit_text(text, reply_markup=kb)
+
 
     elif query.data == "menu_lateness":
         await query.message.edit_text("Введите ID волонтёра для фиксации опоздания:")
