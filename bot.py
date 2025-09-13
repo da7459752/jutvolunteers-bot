@@ -351,11 +351,8 @@ async def callbacks(query: types.CallbackQuery, state: FSMContext):
 
 
 # Обработка кнопок пагинации
-@dp.callback_query()
+@dp.callback_query(lambda c: "_page_" in c.data)
 async def paginate_records(query: types.CallbackQuery, state: FSMContext):
-    if "_page_" not in query.data:
-        return  # это не пагинация
-
     parts = query.data.split("_page_")
     prefix = parts[0]
     page = int(parts[1])
@@ -366,6 +363,8 @@ async def paginate_records(query: types.CallbackQuery, state: FSMContext):
     elif prefix == "blacklist":
         rows = await get_blacklist()
         await show_records(query, rows, page, prefix="blacklist", title="Черный список")
+
+    await query.answer()
 
 
 
