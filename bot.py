@@ -263,6 +263,29 @@ async def show_records(query: types.CallbackQuery, rows, page: int = 0, prefix: 
     else:
         await query.message.edit_text(text, reply_markup=pagination_markup(page, total_pages, prefix))
 
+# --- Обработка кнопок пагинации ---
+@dp.callback_query(lambda c: c.data and c.data.endswith("_menu"))
+async def process_menu_callback(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text("Вы вернулись в главное меню", reply_markup=manage_menu())
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data and ("_next_" in c.data or "_prev_" in c.data))
+async def process_pagination_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = callback.data.split("_")
+    prefix = data[0]        # volunteers или blacklist
+    action = data[1]        # prev / next
+    page = int(data[2])     # текущая страница
+
+    # Сдвигаем страницу
+    if action == "next":
+        page += 1
+    elif action == "prev":
+        page -= 1
+
+    # Отображаем заново
+    await show_records(callback, prefix, page)
+    await callback.answer()
 
 
 
