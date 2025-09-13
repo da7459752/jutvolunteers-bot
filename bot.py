@@ -324,11 +324,13 @@ async def callbacks(query: types.CallbackQuery, state: FSMContext):
         await state.set_state(DeleteVolunteerStates.waiting_for_id)
 
     elif query.data == "menu_main":
-        await query.message.edit_text("📌 Главное меню:", reply_markup=main_menu())
-
+        if query.message.text != "📌 Главное меню:":
+            await query.message.edit_text("📌 Главное меню:", reply_markup=main_menu())
     
     elif query.data == "menu_back":
-        await query.message.edit_text("📌 Главное меню:", reply_markup=main_menu())
+        if query.message.text != "📌 Главное меню:":
+            await query.message.edit_text("📌 Главное меню:", reply_markup=main_menu())
+
 
     elif query.data == "confirm_delete_yes":
         data = await state.get_data()
