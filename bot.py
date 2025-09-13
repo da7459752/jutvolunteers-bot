@@ -221,12 +221,12 @@ def pagination_markup(page: int, total_pages: int, prefix: str):
     buttons = []
     nav_buttons = []
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton("⬅️ Назад", callback_data=f"{prefix}_page_{page-1}"))
+        nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{prefix}_page_{page-1}"))
     if page < total_pages - 1:
-        nav_buttons.append(InlineKeyboardButton("➡️ Вперёд", callback_data=f"{prefix}_page_{page+1}"))
+        nav_buttons.append(InlineKeyboardButton(text="➡️ Вперёд", callback_data=f"{prefix}_page_{page+1}"))
     if nav_buttons:
         buttons.append(nav_buttons)
-    buttons.append([InlineKeyboardButton("Главное меню", callback_data="menu_main")])
+    buttons.append([InlineKeyboardButton(text="Главное меню", callback_data="menu_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # Функция показа записей с пагинацией
