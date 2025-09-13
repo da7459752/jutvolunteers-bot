@@ -53,6 +53,17 @@ async def init_db():
         );
         """)
 
+
+# --- Отправка длинных сообщений ---
+async def send_long_message(message: types.Message, text: str, reply_markup=None):
+    limit = 4000  # ограничение Telegram (оставляем запас)
+    for i in range(0, len(text), limit):
+        chunk = text[i:i + limit]
+        await message.answer(
+            chunk,
+            reply_markup=reply_markup if i + limit >= len(text) else None
+        )
+
 # --- FSM ---
 class LatenessStates(StatesGroup):
     waiting_for_id = State()
@@ -247,7 +258,11 @@ async def show_records(query: types.CallbackQuery, rows, page: int = 0, prefix: 
         elif prefix == "blacklist":
             text += f"{r['id']}. {r['full_name']} | {r['reason']}\n"
 
-    await query.message.edit_text(text, reply_markup=pagination_markup(page, total_pages, prefix))
+    if len(text) > 4000:
+        await send_long_message(query.message, text, reply_markup=pagination_markup(page, total_pages, prefix))
+    else:
+        await query.message.edit_text(text, reply_markup=pagination_markup(page, total_pages, prefix))
+
 
 
 
@@ -452,7 +467,7 @@ async def handle_messages(message: types.Message, state: FSMContext):
                 text += f"{r['id']}. {r['full_name']} | {r['status']} | {r['contacts']} | Опозданий: {r['lateness_count']} | Замечаний: {r['warnings_count']}\n"
         else:
             text = "❌ Ничего не найдено."
-        await message.answer(text, reply_markup=manage_menu())
+        await send_long_message(message, text, reply_markup=manage_menu())
         await state.clear()
 
     elif current_state == DeleteVolunteerStates.waiting_for_id.state:
