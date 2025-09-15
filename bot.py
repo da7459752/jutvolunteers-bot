@@ -55,12 +55,13 @@ async def init_db():
 
 
 # --- Отправка длинных сообщений ---
-async def send_long_message(message: types.Message, text: str, reply_markup=None):
+async def send_long_message(chat_id: int, text: str, reply_markup=None):
     limit = 4000  # ограничение Telegram (оставляем запас)
     for i in range(0, len(text), limit):
         chunk = text[i:i + limit]
-        await message.answer(
-            chunk,
+        await bot.send_message(
+            chat_id=chat_id,
+            text=chunk,
             reply_markup=reply_markup if i + limit >= len(text) else None
         )
 
@@ -247,24 +248,26 @@ async def show_records(query: types.CallbackQuery, rows, page: int = 0, prefix: 
         return
 
     total_pages = (len(rows) + PAGE_SIZE - 1) // PAGE_SIZE
+    if page >= total_pages:
+        page = total_pages - 1
+    if page < 0:
+        page = 0
+
     start = page * PAGE_SIZE
     end = start + PAGE_SIZE
 
-    text = f"{title}:\n"
+    text = f"{title} (стр. {page + 1}/{total_pages}):\n\n"
     for r in rows[start:end]:
-        # Можно менять формат под волонтёров или черный список
         if prefix == "volunteers":
-            text += f"{r['id']}. {r['full_name']} | {r['status']} | {r['contacts']} | Опозданий: {r['lateness_count']} | Замечаний: {r['warnings_count']}\n"
+            text += f"{r['id']}. {r['full_name']} | {r['status']} | {r['contacts']} | Опозданий: {r['lateness_count']} | Замечаний: {r['warnings_count']}\n\n"
         elif prefix == "blacklist":
-            text += f"{r['id']}. {r['full_name']} | {r['reason']}\n"
+            text += f"{r['id']}. {r['full_name']} | {r['reason']} | {r['added'].strftime('%Y-%m-%d') if r['added'] else 'N/A'}\n\n"
 
     if len(text) > 4000:
-        await send_long_message(query.message, text, reply_markup=pagination_markup(page, total_pages, prefix))
+        await query.message.delete()
+        await send_long_message(query.message.chat.id, text, reply_markup=pagination_markup(page, total_pages, prefix))
     else:
         await query.message.edit_text(text, reply_markup=pagination_markup(page, total_pages, prefix))
-
-
-
 
 # --- Колбэки ---
 @dp.callback_query()
@@ -324,13 +327,10 @@ async def callbacks(query: types.CallbackQuery, state: FSMContext):
         await state.set_state(DeleteVolunteerStates.waiting_for_id)
 
     elif query.data == "menu_main":
-        if query.message.text != "📌 Главное меню:":
-            await query.message.edit_text("📌 Главное меню:", reply_markup=main_menu())
+        await query.message.edit_text("📌 Главное меню:", reply_markup=main_menu())
     
     elif query.data == "menu_back":
-        if query.message.text != "📌 Главное меню:":
-            await query.message.edit_text("📌 Главное меню:", reply_markup=main_menu())
-
+        await query.message.edit_text("📌 Главное меню:", reply_markup=main_menu())
 
     elif query.data == "confirm_delete_yes":
         data = await state.get_data()
@@ -351,24 +351,19 @@ async def callbacks(query: types.CallbackQuery, state: FSMContext):
         await query.message.answer(f"Введите новое значение для {field}:")
         await query.answer()
 
-
-# Обработка кнопок пагинации
-@dp.callback_query(lambda c: "_page_" in c.data)
-async def paginate_records(query: types.CallbackQuery, state: FSMContext):
-    parts = query.data.split("_page_")
-    prefix = parts[0]
-    page = int(parts[1])
-
-    if prefix == "volunteers":
+    # Обработка пагинации для волонтеров
+    elif query.data.startswith("volunteers_page_"):
+        page = int(query.data.split("_")[2])
         rows = await get_volunteers()
         await show_records(query, rows, page, prefix="volunteers", title="Список волонтёров")
-    elif prefix == "blacklist":
+
+    # Обработка пагинации для черного списка
+    elif query.data.startswith("blacklist_page_"):
+        page = int(query.data.split("_")[2])
         rows = await get_blacklist()
         await show_records(query, rows, page, prefix="blacklist", title="Черный список")
 
     await query.answer()
-
-
 
 # --- FSM обработка ---
 @dp.message()
@@ -472,7 +467,7 @@ async def handle_messages(message: types.Message, state: FSMContext):
                 text += f"{r['id']}. {r['full_name']} | {r['status']} | {r['contacts']} | Опозданий: {r['lateness_count']} | Замечаний: {r['warnings_count']}\n"
         else:
             text = "❌ Ничего не найдено."
-        await send_long_message(message, text, reply_markup=manage_menu())
+        await send_long_message(message.chat.id, text, reply_markup=manage_menu())
         await state.clear()
 
     elif current_state == DeleteVolunteerStates.waiting_for_id.state:
